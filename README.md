@@ -56,13 +56,14 @@ Bring holiday cheer to your Secret Santa event with **Ho-Ho-Helper**! This Pytho
    ```
 
 2. **Run the application**:
-   Generate assignments:
+   Generate assignments: (use `-h` to discover all the options)
    ```bash
    python -m ho_ho_helper.main
    ```
 
+
 3. **Send email notifications** (optional):
-   If emails are provided in `participants.toml`, you’ll be prompted to send notifications. Just provide your Gmail address and App Password (see below).
+   If emails are provided in `participants.toml` and you pass the `-e` option to the program, you’ll be prompted to send notifications. Just provide your Gmail address and App Password (see below).
 
 ---
 
