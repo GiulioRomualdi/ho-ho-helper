@@ -1,0 +1,12 @@
+[participants]
+names = ["Jack", "Olive", "Sara", "Mark"]
+emails = { }
+
+[constraints]
+couples = [
+    ["Jack", "Olive"],
+    ["Mark", "Sara"]
+]
+direct_constraints = [
+    ["Olive", "Sara"]
+]
