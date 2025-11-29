@@ -3,13 +3,13 @@ import toml
 
 def read_toml_file(file_path):
     """
-    Reads the participants, constraints, and email addresses from a TOML file.
+    Reads the participants, constraints, email addresses, and gift settings from a TOML file.
 
     Parameters:
         file_path (str): Path to the TOML file.
 
     Returns:
-        tuple: (list of participants, list of constraints, dict of emails)
+        tuple: (list of participants, list of constraints, dict of emails, dict of gift settings)
     """
     data = toml.load(file_path)
     participants = data["participants"]["names"]
@@ -24,7 +24,13 @@ def read_toml_file(file_path):
     )
 
     emails = data["participants"].get("emails", {})
-    return participants, constraints, emails
+    gift_settings = data.get("gift", {})
+    normalized_gift_settings = {
+        "max_budget": gift_settings.get("max_budget"),
+        "currency": gift_settings.get("currency"),
+    }
+
+    return participants, constraints, emails, normalized_gift_settings
 
 
 def write_toml_file(file_path, assignments):

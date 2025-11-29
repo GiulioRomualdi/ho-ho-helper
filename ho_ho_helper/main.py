@@ -50,7 +50,7 @@ def main():
     input("Press Enter to continue...")
 
     try:
-        participants, constraints, emails = read_toml_file(input_file)
+        participants, constraints, emails, gift_settings = read_toml_file(input_file)
         result = secret_santa(participants, constraints)
 
         # Save the result to a TOML file
@@ -61,7 +61,13 @@ def main():
         if emails and args.email:
             sender_email = input("Enter your email address: ")
             sender_password = getpass.getpass("Enter your email password: ")
-            send_emails(result, emails, sender_email, sender_password)
+            send_emails(
+                result,
+                emails,
+                sender_email,
+                sender_password,
+                gift_settings,
+            )
             print("Emails sent successfully!")
 
     except ValueError as e:

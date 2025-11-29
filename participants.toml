@@ -1,12 +1,18 @@
 [participants]
-names = ["Jack", "Olive", "Sara", "Mark"]
-emails = { }
+names = ["Alice", "Bob", "Charlie", "Diana", "Eve"]
+
+[participants.emails]
+Alice = "alice@example.com"
+Bob = "bob@example.com"
+Charlie = "charlie@example.com"
+Diana = "diana@example.com"
+Eve = "eve@example.com"
+
+[gift]
+max_budget = 10
+currency = "EUR"
+
 
 [constraints]
-couples = [
-    ["Jack", "Olive"],
-    ["Mark", "Sara"]
-]
-direct_constraints = [
-    ["Olive", "Sara"]
-]
+couples = [["Alice", "Bob"], ["Diana", "Eve"]]
+direct_constraints = [["Alice", "Charlie"]]

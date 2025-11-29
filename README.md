@@ -7,6 +7,7 @@ Bring holiday cheer to your Secret Santa event with **Ho-Ho-Helper**! This Pytho
 - 🔒 **Constraint Support**: Avoids conflicts like couples gifting each other or other custom constraints.
 - 📝 **TOML-based Configuration**: Input participants and constraints via a user-friendly TOML file.
 - 📤 **Optional Email Notifications**: Automatically send assignments to participants (optional).
+- 💰 **Budget Reminders**: Configure a maximum gift budget and currency that get included in emails.
 
 ---
 
@@ -33,27 +34,30 @@ Bring holiday cheer to your Secret Santa event with **Ho-Ho-Helper**! This Pytho
    Edit the `participants.toml` file to include:
    - A list of participant names.
    - Optional email addresses for sending notifications.
+   - Gift budget (amount + currency) information.
    - Constraints for assignments.
 
    Example `participants.toml`:
-   ```toml
-   [participants]
-   names = ["Alice", "Bob", "Charlie", "Diana", "Eve"]
-   emails = {
-       Alice = "alice@example.com",
-       Bob = "bob@example.com",
-       Charlie = "charlie@example.com",
-       Diana = "diana@example.com",
-       Eve = "eve@example.com"
-   }
+      ```toml
+      [participants]
+      names = ["Alice", "Bob", "Charlie", "Diana", "Eve"]
 
-   [constraints]
-   couples = [
-       ["Alice", "Bob"],
-       ["Diana", "Eve"]
-   ]
-   direct_constraints = [["Alice", "Charlie"]]
-   ```
+      [participants.emails]
+      Alice = "alice@example.com"
+      Bob = "bob@example.com"
+      Charlie = "charlie@example.com"
+      Diana = "diana@example.com"
+      Eve = "eve@example.com"
+
+      [gift]
+      max_budget = 10
+      currency = "EUR"
+
+
+      [constraints]
+      couples = [["Alice", "Bob"], ["Diana", "Eve"]]
+      direct_constraints = [["Alice", "Charlie"]]
+      ```
 
 2. **Run the application**:
    Generate assignments: (use `-h` to discover all the options)
@@ -91,16 +95,17 @@ When you run the application:
 
 - Email notifications (if enabled) look like this:
   ```
-  🎅 Ho Ho Ho, Alice! 🎁
+   🎅 Ho Ho Ho, Alice! 🎁
   
-  You have been chosen as the Secret Santa for... 🥁 *Charlie*! 🎉
+   You have been chosen as the Secret Santa for... 🥁 *Charlie*! 🎉
 
-  ✨ Make sure to prepare a thoughtful gift 🎁 and spread the holiday cheer! 🎄
+   ✨ Make sure to prepare a thoughtful gift 🎁 and spread the holiday cheer! 🎄
+   💸 Remember: the maximum budget is 10 EUR.
 
-  Wishing you a season full of joy, laughter, and surprises! ❄️
+   Wishing you a season full of joy, laughter, and surprises! ❄️
 
-  Happy Holidays! 🕊️
-  - Your Secret Santa Organizer 🎅
+   Happy Holidays! 🕊️
+   - Your Secret Santa Organizer 🎅
   ```
 
 ---
