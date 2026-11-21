@@ -1,57 +1,86 @@
+"""Delivery of the Secret Santa assignments via email."""
+
+from __future__ import annotations
+
 import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+import ssl
+from collections.abc import Callable
+from email.message import EmailMessage
+
+from ho_ho_helper.config import GiftSettings
+
+DEFAULT_SMTP_SERVER = "smtp.gmail.com"
+DEFAULT_SMTP_PORT = 587
+SUBJECT = "Your Secret Santa Assignment 🎅"
 
 
-def send_emails(assignments, emails, sender_email, sender_password, gift_settings=None):
+def budget_line(gift: GiftSettings) -> str:
+    if gift.max_budget is None:
+        return ""
+    amount = gift.max_budget
+    if isinstance(amount, float):
+        amount = f"{amount:g}"
+    currency = f" {gift.currency}" if gift.currency else ""
+    return f"💸 Remember: the maximum budget is {amount}{currency}."
+
+
+def build_body(giver: str, receiver: str, gift: GiftSettings | None = None) -> str:
+    budget = budget_line(gift or GiftSettings())
+    return (
+        f"🎅 Ho Ho Ho, {giver}! 🎁\n\n"
+        f"You have been chosen as the Secret Santa for... 🥁 *{receiver}*! 🎉\n\n"
+        "✨ Make sure to prepare a thoughtful gift 🎁 "
+        "and spread the holiday cheer! 🎄\n"
+        + (f"{budget}\n" if budget else "")
+        + "\nWishing you a season full of joy, laughter, and surprises! ❄️\n\n"
+        "Happy Holidays! 🕊️\n\n"
+        "    Your Secret Santa Organizer 🎅\n"
+    )
+
+
+def build_message(
+    sender: str,
+    recipient: str,
+    giver: str,
+    receiver: str,
+    gift: GiftSettings | None = None,
+) -> EmailMessage:
+    message = EmailMessage()
+    message["From"] = sender
+    message["To"] = recipient
+    message["Subject"] = SUBJECT
+    message.set_content(build_body(giver, receiver, gift))
+    return message
+
+
+def send_emails(
+    assignments: dict[str, str],
+    emails: dict[str, str],
+    sender_email: str,
+    sender_password: str,
+    gift: GiftSettings | None = None,
+    *,
+    smtp_server: str = DEFAULT_SMTP_SERVER,
+    smtp_port: int = DEFAULT_SMTP_PORT,
+    on_sent: Callable[[str, str], None] | None = None,
+) -> None:
+    """Send every giver an email with the name of the person they gift.
+
+    Raises:
+        ValueError: If a giver has no email address.
+        smtplib.SMTPException, OSError: If the connection or delivery fails.
     """
-    Sends Secret Santa assignments via email.
+    missing = sorted(giver for giver in assignments if giver not in emails)
+    if missing:
+        raise ValueError(f"Missing email address for: {', '.join(missing)}")
 
-    Parameters:
-        assignments (dict): Secret Santa assignments.
-        emails (dict): Email addresses of participants (name -> email).
-        sender_email (str): Sender's email address.
-        sender_password (str): Sender's email password.
-        gift_settings (dict, optional): Gift configuration containing max budget and currency.
-    """
-    subject = "Your Secret Santa Assignment"
-    smtp_server = "smtp.gmail.com"
-    smtp_port = 587
-    gift_settings = gift_settings or {}
-    max_budget = gift_settings.get("max_budget")
-    currency = gift_settings.get("currency")
-
-    try:
-        with smtplib.SMTP(smtp_server, smtp_port) as server:
-            server.starttls()
-            server.login(sender_email, sender_password)
-
-            for giver, receiver in assignments.items():
-                if giver in emails:
-                    recipient_email = emails[giver]
-                    message = MIMEMultipart()
-                    message["From"] = sender_email
-                    message["To"] = recipient_email
-                    message["Subject"] = subject
-                    budget_line = ""
-                    if max_budget and currency:
-                        budget_line = f"\n💸 Remember: the maximum budget is {max_budget} {currency}."
-                    elif max_budget:
-                        budget_line = (
-                            f"\n💸 Remember: the maximum budget is {max_budget}."
-                        )
-
-                    body = (
-                        f"🎅 Ho Ho Ho, {giver}! 🎁 \n\n"
-                        f"You have been chosen as the Secret Santa for... 🥁 *{receiver}*! 🎉 \n\n"
-                        f"✨ Make sure to prepare a thoughtful gift 🎁 and spread the holiday cheer! 🎄{budget_line} \n\n"
-                        "Wishing you a season full of joy, laughter, and surprises! ❄️ \n\n"
-                        "Happy Holidays! 🕊️\n\n"
-                        "    Your Secret Santa Organizer 🎅"
-                    )
-                    message.attach(MIMEText(body, "plain"))
-                    server.sendmail(sender_email, recipient_email, message.as_string())
-                    print(f"Email sent to {giver} ({recipient_email})")
-
-    except Exception as e:
-        print(f"Error sending emails: {e}")
+    with smtplib.SMTP(smtp_server, smtp_port) as server:
+        server.starttls(context=ssl.create_default_context())
+        server.login(sender_email, sender_password)
+        for giver, receiver in assignments.items():
+            recipient = emails[giver]
+            server.send_message(
+                build_message(sender_email, recipient, giver, receiver, gift)
+            )
+            if on_sent is not None:
+                on_sent(giver, recipient)

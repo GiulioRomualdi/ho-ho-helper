@@ -1,0 +1,81 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ho-ho-helper"
+version = "1.0.0"
+description = "A fair and friendly Secret Santa organizer with constraints and email delivery."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Giulio Romualdi" }]
+requires-python = ">=3.11"
+dependencies = ["tomli-w>=1.0"]
+classifiers = [
+  "Environment :: Console",
+  "Programming Language :: Python :: 3",
+  "Topic :: Games/Entertainment",
+]
+
+[project.urls]
+Repository = "https://github.com/GiulioRomualdi/ho-ho-helper"
+Issues = "https://github.com/GiulioRomualdi/ho-ho-helper/issues"
+
+[project.scripts]
+ho-ho-helper = "ho_ho_helper.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["ho_ho_helper"]
+
+# ----------------------------------------------------------------------------
+# pixi
+# ----------------------------------------------------------------------------
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "linux-aarch64", "osx-64", "osx-arm64", "win-64"]
+
+[tool.pixi.dependencies]
+python = ">=3.11"
+tomli-w = ">=1.0"
+
+[tool.pixi.pypi-dependencies]
+ho-ho-helper = { path = ".", editable = true }
+
+[tool.pixi.tasks]
+start = { cmd = "ho-ho-helper", description = "Draw the Secret Santa assignments" }
+
+[tool.pixi.feature.test.dependencies]
+pytest = ">=8"
+scipy = ">=1.11"
+
+[tool.pixi.feature.test.tasks]
+test = { cmd = "pytest", description = "Run the test suite" }
+
+[tool.pixi.feature.lint.dependencies]
+ruff = ">=0.8"
+
+[tool.pixi.feature.lint.tasks]
+lint = { cmd = "ruff check . && ruff format --check .", description = "Lint and check formatting" }
+format = { cmd = "ruff check --fix . && ruff format .", description = "Auto-format the code" }
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+test = { features = ["test"], solve-group = "default" }
+lint = { features = ["lint"], no-default-feature = true }
+
+# ----------------------------------------------------------------------------
+# tools
+# ----------------------------------------------------------------------------
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-ra", "--strict-markers"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
