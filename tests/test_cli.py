@@ -2,7 +2,11 @@ import smtplib
 
 import pytest
 
-from ho_ho_helper.config import read_assignments, write_assignments
+from ho_ho_helper.config import (
+    read_assignments,
+    read_emails_sent,
+    write_assignments,
+)
 from ho_ho_helper.main import main
 
 PARTICIPANTS_TOML = """\
@@ -117,16 +121,129 @@ def test_email_requires_every_address(workdir, capsys):
     assert not (workdir / "assignments.toml").exists()
 
 
-def test_email_failure_is_reported(workdir, monkeypatch, capsys):
-    def broken_smtp(*args, **kwargs):
-        raise smtplib.SMTPConnectError(421, b"unavailable")
+@pytest.fixture
+def credentials(monkeypatch):
+    """Answer the email prompts; fail if a password is asked unexpectedly."""
+    prompts = []
 
-    monkeypatch.setattr(smtplib, "SMTP", broken_smtp)
-    monkeypatch.setattr("builtins.input", lambda prompt="": "santa@x.org")
+    def fake_input(prompt=""):
+        prompts.append(prompt)
+        return "santa@x.org"
+
+    monkeypatch.setattr("builtins.input", fake_input)
     monkeypatch.setattr("getpass.getpass", lambda prompt="": "secret")
+    monkeypatch.setattr("time.sleep", lambda seconds: None)
+    return prompts
+
+
+def test_draw_and_email_records_delivery(workdir, fake_smtp, credentials, capsys):
+    assert main(["--yes", "--email"]) == 0
+    assert len(fake_smtp.delivered()) == 5
+    sent = read_emails_sent(workdir / "assignments.toml")
+    assert sent["Alice"] == "alice@example.com"
+    assert len(sent) == 5
+    assert "All 5 emails sent" in capsys.readouterr().out
+
+
+def test_interrupted_delivery_can_be_resumed_without_a_new_draw(
+    workdir, fake_smtp, credentials, capsys
+):
+    fake_smtp.failures["diana@example.com"] = [
+        smtplib.SMTPRecipientsRefused({"diana@example.com": (550, b"mailbox full")})
+    ]
+    assert main(["--yes", "--email"]) == 1
+    err = capsys.readouterr().err
+    assert "4/5 email(s) sent" in err
+    assert "Diana" in err
+    assert "--send assignments.toml" in err
+    draw = read_assignments(workdir / "assignments.toml")
+    assert "Diana" not in read_emails_sent(workdir / "assignments.toml")
+
+    fake_smtp.instances.clear()
+    assert main(["--yes", "--send", "assignments.toml"]) == 0
+    assert fake_smtp.delivered() == ["diana@example.com"]
+    assert f"*{draw['Diana']}*" in fake_smtp.instances[0].sent[0].get_content()
+    assert read_assignments(workdir / "assignments.toml") == draw
+    assert len(read_emails_sent(workdir / "assignments.toml")) == 5
+
+    fake_smtp.instances.clear()
+    assert main(["--yes", "--send", "assignments.toml"]) == 0
+    assert fake_smtp.delivered() == []
+    assert "Everybody already received" in capsys.readouterr().out
+
+    assert main(["--yes", "--send", "assignments.toml", "--force"]) == 0
+    assert len(fake_smtp.delivered()) == 5
+
+
+def test_corrected_address_is_emailed_again(workdir, fake_smtp, credentials, capsys):
+    assert main(["--yes", "--email"]) == 0
+    config = workdir / "participants.toml"
+    config.write_text(config.read_text().replace("bob@example.com", "bob@new.org"))
+
+    fake_smtp.instances.clear()
+    assert main(["--yes", "--send", "assignments.toml"]) == 0
+    assert fake_smtp.delivered() == ["bob@new.org"]
+    assert "Bob's address changed" in capsys.readouterr().out
+    assert read_emails_sent(workdir / "assignments.toml")["Bob"] == "bob@new.org"
+
+
+def test_unreachable_server_keeps_the_draw_and_explains_how_to_resume(
+    workdir, fake_smtp, credentials, capsys
+):
+    fake_smtp.connect_errors = [smtplib.SMTPConnectError(421, b"unavailable")] * 10
     assert main(["--yes", "--email"]) == 1
     captured = capsys.readouterr()
     assert "Error sending emails" in captured.err
-    assert "All emails sent" not in captured.out
-    # The draw is saved anyway, so emails can be resent manually.
+    assert "--send assignments.toml" in captured.err
+    assert "All 5 emails sent" not in captured.out
     assert (workdir / "assignments.toml").exists()
+
+
+def test_wrong_password_gives_a_hint(workdir, fake_smtp, credentials, capsys):
+    fake_smtp.login_error = smtplib.SMTPAuthenticationError(535, b"bad credentials")
+    assert main(["--yes", "--email"]) == 1
+    assert "App Password" in capsys.readouterr().err
+
+
+def test_dry_run_sends_nothing_and_does_not_spoil(
+    workdir, fake_smtp, credentials, capsys
+):
+    assert main(["--yes", "--seed", "1"]) == 0
+    draw = read_assignments(workdir / "assignments.toml")
+    capsys.readouterr()
+
+    assert main(["--yes", "--send", "assignments.toml", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert fake_smtp.instances == []
+    assert credentials == []
+    assert "alice@example.com" in out
+    assert all(f"*{receiver}*" not in out for receiver in draw.values())
+    assert read_emails_sent(workdir / "assignments.toml") == {}
+
+
+def test_test_email(workdir, fake_smtp, credentials, capsys):
+    assert main(["--yes", "--test-to", "me@x.org"]) == 0
+    assert fake_smtp.delivered() == ["me@x.org"]
+    assert not (workdir / "assignments.toml").exists()
+
+
+def test_send_rejects_a_file_that_does_not_match(workdir, fake_smtp, capsys):
+    write_assignments(workdir / "old.toml", {"Alice": "Zed", "Zed": "Alice"})
+    assert main(["--yes", "--send", "old.toml"]) == 1
+    assert "Zed" in capsys.readouterr().err
+    assert fake_smtp.instances == []
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["--send", "a.toml", "--single-cycle"],
+        ["--send", "a.toml", "--email"],
+        ["--test-to", "me@x.org", "-p", "a.toml"],
+        ["--dry-run"],
+    ],
+)
+def test_incompatible_options(args):
+    with pytest.raises(SystemExit) as error:
+        main(args)
+    assert error.value.code == 2

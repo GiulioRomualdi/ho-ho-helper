@@ -1,43 +1,25 @@
 import smtplib
-from typing import ClassVar
 
 import pytest
 
 from ho_ho_helper.config import GiftSettings
-from ho_ho_helper.emailer import build_body, build_message, send_emails
+from ho_ho_helper.emailer import (
+    HIDDEN_RECEIVER,
+    SmtpSettings,
+    build_body,
+    build_message,
+    send_emails,
+    send_test_email,
+)
+
+SMTP = SmtpSettings(sender="santa@x.org", password="secret", server="smtp.x.org")
+ASSIGNMENTS = {"Alice": "Bob", "Bob": "Carol", "Carol": "Alice"}
+EMAILS = {"Alice": "alice@x.org", "Bob": "bob@x.org", "Carol": "carol@x.org"}
 
 
-class FakeSMTP:
-    instances: ClassVar[list["FakeSMTP"]] = []
-
-    def __init__(self, server, port):
-        self.server, self.port = server, port
-        self.sent = []
-        self.tls = False
-        self.credentials = None
-        FakeSMTP.instances.append(self)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
-
-    def starttls(self, context=None):
-        self.tls = True
-
-    def login(self, user, password):
-        self.credentials = (user, password)
-
-    def send_message(self, message):
-        self.sent.append(message)
-
-
-@pytest.fixture
-def fake_smtp(monkeypatch):
-    FakeSMTP.instances = []
-    monkeypatch.setattr(smtplib, "SMTP", FakeSMTP)
-    return FakeSMTP
+def send(**kwargs):
+    kwargs.setdefault("sleep", lambda seconds: None)
+    return send_emails(ASSIGNMENTS, EMAILS, SMTP, GiftSettings(10, "EUR"), **kwargs)
 
 
 @pytest.mark.parametrize(
@@ -69,37 +51,87 @@ def test_message_headers_and_unicode():
 
 def test_send_emails(fake_smtp):
     sent = []
-    send_emails(
-        {"Alice": "Bob", "Bob": "Alice"},
-        {"Alice": "alice@x.org", "Bob": "bob@x.org"},
-        "santa@x.org",
-        "secret",
-        GiftSettings(10, "EUR"),
-        smtp_server="smtp.example.org",
-        smtp_port=2525,
-        on_sent=lambda giver, email: sent.append((giver, email)),
-    )
+    report = send(on_sent=lambda giver, email: sent.append((giver, email)))
     (server,) = fake_smtp.instances
-    assert (server.server, server.port) == ("smtp.example.org", 2525)
+    assert server.server == "smtp.x.org"
     assert server.tls
     assert server.credentials == ("santa@x.org", "secret")
-    assert [m["To"] for m in server.sent] == ["alice@x.org", "bob@x.org"]
+    assert server.closed
+    assert fake_smtp.delivered() == ["alice@x.org", "bob@x.org", "carol@x.org"]
     assert "*Bob*" in server.sent[0].get_content()
-    assert sent == [("Alice", "alice@x.org"), ("Bob", "bob@x.org")]
+    assert sent == [(g, EMAILS[g]) for g in ASSIGNMENTS]
+    assert report.sent == list(ASSIGNMENTS)
+    assert report.failed == {}
+
+
+def test_skip_already_notified(fake_smtp):
+    report = send(skip={"Alice", "Carol"})
+    assert fake_smtp.delivered() == ["bob@x.org"]
+    assert report.sent == ["Bob"]
 
 
 def test_missing_email_raises_before_connecting(fake_smtp):
     with pytest.raises(ValueError, match="Bob"):
-        send_emails(
-            {"Alice": "Bob", "Bob": "Alice"}, {"Alice": "alice@x.org"}, "s", "p"
-        )
+        send_emails(ASSIGNMENTS, {"Alice": "a@x.org", "Carol": "c@x.org"}, SMTP)
     assert fake_smtp.instances == []
 
 
-def test_smtp_errors_are_propagated(fake_smtp, monkeypatch):
-    def fail(self, user, password):
-        raise smtplib.SMTPAuthenticationError(535, b"bad credentials")
+def test_transient_errors_are_retried_with_a_new_connection(fake_smtp):
+    fake_smtp.failures["bob@x.org"] = [
+        smtplib.SMTPServerDisconnected("connection lost"),
+        smtplib.SMTPResponseException(421, b"try again later"),
+    ]
+    report = send()
+    assert report.sent == list(ASSIGNMENTS)
+    assert sorted(fake_smtp.delivered()) == sorted(EMAILS.values())
+    assert len(fake_smtp.instances) == 3
 
-    monkeypatch.setattr(FakeSMTP, "login", fail)
+
+def test_temporary_recipient_refusal_is_retried(fake_smtp):
+    fake_smtp.failures["bob@x.org"] = [
+        smtplib.SMTPRecipientsRefused({"bob@x.org": (450, b"try again later")})
+    ]
+    report = send()
+    assert report.sent == list(ASSIGNMENTS)
+    assert report.failed == {}
+
+
+def test_permanent_failure_does_not_stop_the_others(fake_smtp):
+    fake_smtp.failures["bob@x.org"] = [
+        smtplib.SMTPRecipientsRefused({"bob@x.org": (550, b"no such user")})
+    ]
+    report = send()
+    assert report.sent == ["Alice", "Carol"]
+    assert list(report.failed) == ["Bob"]
+    assert fake_smtp.delivered() == ["alice@x.org", "carol@x.org"]
+
+
+def test_gives_up_after_the_retries(fake_smtp):
+    fake_smtp.failures["bob@x.org"] = [TimeoutError("timed out")] * 10
+    delays = []
+    report = send(retries=2, sleep=delays.append)
+    assert report.sent == ["Alice", "Carol"]
+    assert report.failed == {"Bob": "timed out"}
+    assert delays == [2.0, 4.0]
+
+
+def test_unreachable_server_aborts(fake_smtp):
+    fake_smtp.connect_errors = [ConnectionRefusedError("refused")] * 10
+    with pytest.raises(ConnectionRefusedError):
+        send(retries=2)
+    assert fake_smtp.instances == []
+
+
+def test_authentication_error_aborts(fake_smtp):
+    fake_smtp.login_error = smtplib.SMTPAuthenticationError(535, b"bad credentials")
     with pytest.raises(smtplib.SMTPAuthenticationError):
-        send_emails({"Alice": "Bob"}, {"Alice": "a@x.org"}, "s", "p")
+        send()
+    assert all(server.closed for server in fake_smtp.instances)
+
+
+def test_test_email_hides_the_match(fake_smtp):
+    send_test_email("me@x.org", SMTP, GiftSettings(10, "EUR"))
+    ((message,),) = [server.sent for server in fake_smtp.instances]
+    assert message["To"] == "me@x.org"
+    assert message["Subject"].startswith("[TEST]")
+    assert HIDDEN_RECEIVER in message.get_content()

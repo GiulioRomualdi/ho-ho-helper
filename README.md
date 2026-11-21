@@ -24,7 +24,7 @@ and email everyone their secret match.
 | 💑 **Constraints** | Keep couples from drawing each other, or block any one-way pair (*"Alice can't gift Charlie"*). |
 | 📅 **No repeats from last year** | Pass last year's results and nobody gets the same person again. |
 | 🔁 **Single gift loop** | Optionally make the gifts go around one big loop through everyone: A → B → C → … → A. |
-| 📬 **Email delivery** | Sends every participant their match, so even the organizer can take part without peeking. |
+| 📬 **Email delivery** | Sends every participant their match, so even the organizer can take part without peeking. Failed or interrupted sends can be resumed without a new draw. |
 | 💸 **Budget reminder** | Puts the maximum budget and currency in the emails. |
 | 🛡️ **Safe by default** | Catches typos in names, never overwrites a previous draw, and stops with a clear error if no draw is possible. |
 
@@ -116,23 +116,45 @@ pixi run start -o assignments-2027.toml -p assignments-2026.toml
 | `-o, --output FILE` | Where to save the assignments (default: `assignments.toml`); an existing file is never overwritten unless you pass `--force` |
 | `-p, --previous FILE` | Results of a past edition; its pairs are excluded (repeatable) |
 | `--single-cycle` | All gifts form a single loop through every participant |
-| `-e, --email` | Email each participant their match |
+| `-e, --email` | After the draw, email each participant their match |
+| `--send FILE` | No draw: send the emails of an existing assignments file, skipping who already got theirs |
+| `--test-to ADDRESS` | Only send one sample email (match hidden) to check that sending works |
+| `--dry-run` | With `-e`, `--send` or `--test-to`: show what would be sent, without sending |
 | `--smtp-server`, `--smtp-port` | SMTP server (default: `smtp.gmail.com:587`, STARTTLS) |
 | `--seed N` | Reproducible draw, for testing only |
-| `--force` | Overwrite the output file |
+| `--force` | Overwrite the output file; with `--send`, email everybody again |
 | `-y, --yes` | Don't ask for confirmation |
 
 ---
 
 ## 📬 Email delivery
 
-With `-e`, you're asked for your email address and password after the draw. To use Gmail:
+Ho-Ho-Helper sends the emails from your own account. You're asked for your address and password
+when sending, and they are never stored. To use Gmail:
 
 1. Turn on **2-Step Verification** for your Google account.
 2. Create an **App Password** ([Google's instructions](https://support.google.com/mail/answer/185833)).
+   Your normal Gmail password won't work.
 3. Enter your Gmail address and the App Password when asked.
 
 For other providers, use `--smtp-server` and `--smtp-port`.
+
+**Recommended workflow** 🎯
+
+```bash
+pixi run start --test-to you@gmail.com                 # 1. check the login with one sample email (no spoilers)
+pixi run start -o assignments-2026.toml                # 2. draw
+pixi run start --send assignments-2026.toml --dry-run  # 3. check the recipients (no spoilers)
+pixi run start --send assignments-2026.toml            # 4. send!
+```
+
+Delivery is built to survive problems:
+
+- 🔁 Temporary errors (lost connection, timeouts, "try again later") are retried automatically.
+- ➡️ If one address fails, the others are still sent, and you get a summary at the end.
+- 💾 Every successful delivery is saved right away in the assignments file (the `[emails_sent]` table).
+  If anything goes wrong, even a crash, run `--send` with the same file again. **The draw stays the same,
+  and only the people who are still missing get an email.**
 
 Every participant gets an email like this:
 

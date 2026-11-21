@@ -98,10 +98,35 @@ def read_assignments(path: str | Path) -> dict[str, str]:
     return assignments
 
 
-def write_assignments(path: str | Path, assignments: dict[str, str]) -> None:
-    """Write the Secret Santa assignments to a TOML file."""
-    with open(path, "wb") as file:
-        tomli_w.dump({"assignments": dict(sorted(assignments.items()))}, file)
+def read_emails_sent(path: str | Path) -> dict[str, str]:
+    """Read who already received their assignment email (giver -> address)."""
+    with open(path, "rb") as file:
+        data = tomllib.load(file)
+    sent = data.get("emails_sent", {})
+    if not isinstance(sent, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in sent.items()
+    ):
+        raise ConfigError(f"{path} contains an invalid [emails_sent] table.")
+    return sent
+
+
+def write_assignments(
+    path: str | Path,
+    assignments: dict[str, str],
+    emails_sent: dict[str, str] | None = None,
+) -> None:
+    """Write the Secret Santa assignments (and the email delivery status) to TOML.
+
+    The file is replaced atomically, so it is never left half-written.
+    """
+    data: dict[str, Any] = {"assignments": dict(sorted(assignments.items()))}
+    if emails_sent:
+        data["emails_sent"] = dict(sorted(emails_sent.items()))
+    path = Path(path)
+    tmp = path.with_name(f".{path.name}.tmp")
+    with open(tmp, "wb") as file:
+        tomli_w.dump(data, file)
+    tmp.replace(path)
 
 
 def _table(data: dict[str, Any], key: str, required: bool = True) -> dict[str, Any]:
