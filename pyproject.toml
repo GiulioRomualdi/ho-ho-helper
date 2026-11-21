@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "ho-ho-helper"
-version = "1.0.0"
+dynamic = ["version"]
 description = "A fair and friendly Secret Santa organizer with constraints and email delivery."
 readme = "README.md"
 license = "MIT"
@@ -24,6 +24,12 @@ Issues = "https://github.com/GiulioRomualdi/ho-ho-helper/issues"
 
 [project.scripts]
 ho-ho-helper = "ho_ho_helper.main:main"
+
+# The version comes from the git tag (e.g. tag v1.2.0 -> version 1.2.0); commits
+# after a tag get a development version such as 1.2.1.dev3+g1a2b3c4.
+[tool.hatch.version]
+source = "vcs"
+fallback-version = "0.0.0"
 
 [tool.hatch.build.targets.wheel]
 packages = ["ho_ho_helper"]

@@ -124,6 +124,7 @@ pixi run start -o assignments-2027.toml -p assignments-2026.toml
 | `--seed N` | Reproducible draw, for testing only |
 | `--force` | Overwrite the output file; with `--send`, email everybody again |
 | `-y, --yes` | Don't ask for confirmation |
+| `-V, --version` | Show the version |
 
 ---
 
@@ -213,6 +214,19 @@ pixi run test     # run the test suite
 pixi run lint     # ruff lint + format check
 pixi run format   # auto-format the code
 ```
+
+### 🏷️ Releasing
+
+The version comes from the git tag (via [hatch-vcs](https://github.com/ofek/hatch-vcs)), so there is no
+version number to edit by hand. To release, tag the commit and push the tag:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+`ho-ho-helper --version` then prints `1.0.0`. Commits after a tag get a development version such as
+`1.0.1.dev3+g1a2b3c4`.
 
 Contributions are welcome! Fork the repository, create a branch, and open a pull request. 🎁
 

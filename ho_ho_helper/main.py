@@ -10,6 +10,7 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from ho_ho_helper import __version__
 from ho_ho_helper.config import (
     Config,
     Pair,
@@ -47,6 +48,9 @@ def build_parser() -> argparse.ArgumentParser:
         prog="ho-ho-helper",
         description=DESCRIPTION,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "-V", "--version", action="version", version=f"%(prog)s {__version__}"
     )
     parser.add_argument(
         "-f",
